@@ -45,7 +45,8 @@ def DOLOGIN(request):
             return redirect('home')
         else:
             messages.error(request, 'Email and Password Are Invalid !')
-            return redirect('login')
+            
+    return redirect(request,'registration/login.html')
 
 
 def PROFILE(request):

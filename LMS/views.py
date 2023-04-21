@@ -1,9 +1,13 @@
 import base64
+from collections import Counter
+from django.db.models import Count
 from datetime import datetime
 import io
-from django.shortcuts import redirect, render
+from django.shortcuts import render
+from matplotlib.backends.backend_agg import FigureCanvasAgg
+import matplotlib.pyplot as plt
 
-from app.models import Categories, Course, Emotion, Level, User
+from app.models import  Emotion, User
 from django.template.loader import render_to_string
 from django.http import HttpResponse, JsonResponse
 from django.utils.text import slugify
@@ -59,7 +63,7 @@ def camera(request):
 @login_required
 def detect_faces_view(request):
     user = request.user
-    emotions=emotions.objects.all()
+    emotions=Emotion.objects.all()
     
 
     if request.method=="POST":
@@ -117,52 +121,46 @@ def detect_faces_view(request):
             if max_emotion == 'neutral':
                 webbrowser.open(f"https://www.youtube.com/results?search_query={singer}+{lang}+songs")
             elif max_emotion != 'neutral':
-                webbrowser.open(f"https://www.youtube.com/results?search_query={singer}+{lang}+{max_emotion}")
-            
+                webbrowser.open(f"https://www.youtube.com/results?search_query={singer}+{lang}+{max_emotion}+songs")
 
+        return HttpResponse("Detection Completed")
+        
+@login_required
 def visualize(request):
-     
-    emotions = Emotion.objects.filter(user=request.user)
+    current_user = request.user
 
-    # Create a dictionary to store emotion counts
-    emotion_counts = {
-            'angry': 0,
-            'disgust': 0,
-            'fear': 0,
-            'happy': 0,
-            'sad': 0,
-            'surprise': 0,
-            'neutral': 0
-        }
-
-        # Count the occurrences of each emotion
-    for emotion in emotions:
-            
-            emotion_counts[emotion.dominant_emotion] += 1
-
-        # Plot a bar chart of the emotion counts
-    labels = list(emotion_counts.keys())
-    values = list(emotion_counts.values())
-
-    fig, ax = plt.subplots()
-    ax.bar(labels, values)
-    ax.set_title('Emotion Chart')
-    ax.set_xlabel('Emotion')
-    ax.set_ylabel('Count')
-
-        # Save the chart to a BytesIO object
-    chart_buffer = io.BytesIO()
-    plt.savefig(chart_buffer, format='png')
-    chart_buffer.seek(0)
-
-        # Render the chart as a base64-encoded string
-    chart_data = base64.b64encode(chart_buffer.getvalue()).decode('utf-8')
-    chart_html = f'<img src="data:image/png;base64,{chart_data}">'
-
-        # Pass the chart HTML to the template
-    context = {'chart_html': chart_html}
-    return render(request, 'registration/dashboard.html', context)
+    # Filter emotions by the current user and count the number of instances of each emotion
+    emotions_data = Emotion.objects.filter(user=current_user).values('dominant_emotion').annotate(total=Count('dominant_emotion'))
     
+
+    # Create a dictionary of emotions and their corresponding values
+    emotions_dict = {d['dominant_emotion']: d['total'] for d in emotions_data}
+
+    # Extract the emotions and values as lists
+    emotions = list(emotions_dict.keys())
+    values = list(emotions_dict.values())
+
+    # Create a pie chart using the values and labels
+    fig, ax = plt.subplots()
+    ax.pie(values, labels=emotions, autopct='%1.1f%%')
+    ax.set_title('Emotions Distribution')
+
+    # Convert the pie chart to an image
+    canvas = FigureCanvasAgg(fig)
+    buf = io.BytesIO()
+    canvas.print_png(buf)
+    plt.close(fig)
+
+    # Return the image as an HTTP response
+    response = HttpResponse(buf.getvalue(), content_type='image/png')
+    return response
+    
+   
+   
+            
+
+
+     
     
 
             
@@ -196,14 +194,9 @@ def visualize(request):
 
 
 def HOME(request):
-    category = Categories.objects.all().order_by('id')[0:5]
-    course = Course.objects.filter(status='PUBLISH').order_by('-id')
-    context = {
-        'category': category,
-        'course': course,
-    }
 
-    return render(request, 'Main/home.html', context)
+
+    return render(request, 'Main/home.html')
 
 
 
